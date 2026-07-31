@@ -1,10 +1,11 @@
-#include "headers/misc.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <time.h>
 #include <sys/stat.h>
+
+#include "headers/misc.h"
 
 #define SOURCE "./src/"
 #define COMPILER "gcc"
@@ -26,14 +27,18 @@ typedef struct {
 void print_help() {
 	printf(
 		"This is a basic build script for the program. Usage:\n"
-		"	"__FILE__"   - just compile the program into "TARGET"\n"
-		"	-r/--run  - run the program right after the compilation\n"
-		"	-h/--help - print this help message\n"
+		"	"BUILD_EXECUTABLE"   - just compile the program into "TARGET"\n"
+		"	-r/--run   - run the program right after the compilation\n"
+		"	-d/--debug - compile in debug mode\n"
+		"	-g         - attach debugger\n"
+		"	-h/--help  - print this help message\n"
 	);
 }
 
 Context default_context(int argc, char** argv) {
-	char* args = "-lvulkan -lglfw -O3";
+	Vec args_vec = vec_new(sizeof(char*));
+	vec_push_str(&args_vec, "-lvulkan -lglfw -O3 ");
+
 	CompilerFlags flags = 0;
 	char* argv_array[(argc - 1) * 2];
 
@@ -45,6 +50,10 @@ Context default_context(int argc, char** argv) {
 			exit(0);
 		} else if (strcmp(flag, "-r") == 0 || strcmp(flag, "--run") == 0) {
 			flags |= COMPILE_EXECUTE;
+		} else if (strcmp(flag, "-d") == 0 || strcmp(flag, "--debug") == 0) {
+			vec_push_str(&args_vec, "-DDEBUG ");
+		} else if (strcmp(flag, "-g") == 0) {
+			vec_push_str(&args_vec, "-g ");
 		} else {
 			fprintf(stderr, "[ERROR] unknown flag: %s\n", flag);
 			print_help();
@@ -54,6 +63,9 @@ Context default_context(int argc, char** argv) {
 		argv_array[(i - 1) * 2] = " ";
 		argv_array[(i - 1) * 2 + 1] = flag;
 	}
+
+	char* args = vec_to_str(&args_vec);
+	vec_free(&args_vec);
 
 	size_t argv_size = 1;
 	for (int i = 0; i < (argc - 1) * 2; ++i) argv_size += strlen(argv_array[i]);
@@ -110,7 +122,21 @@ void rebuild_builder(Context* ctx, Vec* build_sources) {
 	if (!should_rebuild_builder(build_sources)) return;
 	printf("[INFO] Rebuilding the builder...\n");
 
-	system(COMPILER" "__FILE__" -o "BUILD_EXECUTABLE); // build the build script
+	Vec sources = vec_new(sizeof(char*));
+	vec_push_str(&sources, COMPILER" ");
+
+	Iter sources_iter = vec_iter(build_sources);
+	char** source;
+	while ((source = iter_next(&sources_iter)) != NULL) {
+		vec_push(&sources, source);
+		vec_push_str(&sources, " ");
+	}
+	vec_push_str(&sources, "-o "BUILD_EXECUTABLE);
+	char* cmd = vec_to_str(&sources);
+	vec_free(&sources);
+
+	printf("[INFO] Running \"%s\"\n", cmd);
+	system(cmd); // build the build script
 	printf("[INFO] Compiled the builder executable: "BUILD_EXECUTABLE"\n");
 	if (should_rebuild_builder(build_sources)) {
 		fprintf(stderr, "[ERROR] Need to rebuild executable after it was rebuilt\n");
@@ -180,16 +206,17 @@ void compile(Context* ctx) {
 
 int main(int argc, char **argv) {
 	Context ctx = default_context(argc, argv);
-	char* builder[] = { SOURCE "build.c", SOURCE "misc.c" };
+	char* builder[] = { SOURCE "misc.c", SOURCE "build.c" };
 	Vec builder_sources = vec_from_array(sizeof(char*), builder, 2);
 
 	rebuild_builder(&ctx, &builder_sources);
 
 	// printf("%s\n", builder_sources.values);
 	printf("[INFO] Adding files to build\n");
-	add_file(SOURCE "init.c", &ctx);
-	add_file(SOURCE "main.c", &ctx);
-	add_file(SOURCE "misc.c", &ctx);
+	add_file(SOURCE "init.c",        &ctx);
+	add_file(SOURCE "main.c",        &ctx);
+	add_file(SOURCE "misc.c",        &ctx);
+	add_file(SOURCE "vulkan_misc.c", &ctx);
 
 	compile(&ctx);
 	return 0;

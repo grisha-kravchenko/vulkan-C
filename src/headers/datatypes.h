@@ -1,6 +1,7 @@
 #ifndef P_DATATYPES
 #define P_DATATYPES 1
-#include <vulkan/vulkan.h>
+
+#include <vulkan/vulkan_core.h>
 #include <stdlib.h>
 
 typedef uint32_t u32;
@@ -26,7 +27,13 @@ typedef struct {
 } Iter;
 
 typedef struct {
-	VkInstance instance;
+	VkInstance       instance;
+	VkPhysicalDevice physical_device;
+	VkDevice         device;
+	VkQueue          queue;
+#ifdef DEBUG
+	VkDebugUtilsMessengerEXT debug_messenger;
+#endif
 } Program;
 
 #endif
