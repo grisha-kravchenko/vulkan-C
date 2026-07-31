@@ -1,3 +1,4 @@
+#include "headers/misc.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5,6 +6,8 @@
 #include <time.h>
 #include <sys/stat.h>
 
+#define SOURCE "./src/"
+#define COMPILER "gcc"
 #define TARGET "./target"
 #define BUILD_EXECUTABLE "./build"
 
@@ -30,7 +33,7 @@ void print_help() {
 }
 
 Context default_context(int argc, char** argv) {
-	char* args = "-O3";
+	char* args = "-lvulkan -lglfw -O3";
 	CompilerFlags flags = 0;
 	char* argv_array[(argc - 1) * 2];
 
@@ -74,34 +77,42 @@ Context default_context(int argc, char** argv) {
 	return ctx;
 }
 
-bool should_rebuild_builder() {
+int should_rebuild_builder(Vec* build_sources) {
 	struct stat src_stat;
 	struct stat dst_stat;
 
-	if (stat(__FILE__, &src_stat) == -1) {
-		perror("[ERROR] Couldn't get stat of "__FILE__);
-		exit(1);
-	}
-
 	if (stat(BUILD_EXECUTABLE, &dst_stat) == -1) {
-		if (errno == ENOENT) return true; // no executable found
+		if (errno == ENOENT) return 1; // no executable found
 		perror("[ERROR] Couldn't get stat of "BUILD_EXECUTABLE);
 		exit(1);
 	}
 
-	time_t src_time = src_stat.st_mtime;
 	time_t dst_time = dst_stat.st_mtime;
 
-	return src_time > dst_time;
+	char** source;
+	Iter iter = vec_iter(build_sources);
+	while ((source = iter_next(&iter)) != NULL) {
+		if (stat(*source, &src_stat) == -1) {
+			char* err[] = { "[ERROR] Couldn't get stat of ", *source };
+			Vec err_vec = vec_from_array(sizeof(char*), err, 2);
+			perror(vec_to_str(&err_vec));
+			exit(1);
+		}
+
+		time_t src_time = src_stat.st_mtime;
+		if (src_time > dst_time) return 1;
+	}
+
+	return 0;
 }
 
-void rebuild_builder(Context* ctx) {
-	if (!should_rebuild_builder()) return;
+void rebuild_builder(Context* ctx, Vec* build_sources) {
+	if (!should_rebuild_builder(build_sources)) return;
 	printf("[INFO] Rebuilding the builder...\n");
 
-	system("gcc "__FILE__" -o "BUILD_EXECUTABLE); // build the build script
+	system(COMPILER" "__FILE__" -o "BUILD_EXECUTABLE); // build the build script
 	printf("[INFO] Compiled the builder executable: "BUILD_EXECUTABLE"\n");
-	if (should_rebuild_builder()) {
+	if (should_rebuild_builder(build_sources)) {
 		fprintf(stderr, "[ERROR] Need to rebuild executable after it was rebuilt\n");
 		fprintf(stderr, "[ERROR] There is likely a problem inside compilation\n");
 		exit(1);
@@ -132,10 +143,9 @@ void add_file(char* file, Context* ctx) {
 
 void compile(Context* ctx) {
 	printf("[INFO] Compiling the project\n");
-	// char* command_array[] = {"gcc ", file, " ", ctx->args, " -o ", file};
 	size_t cmd_arr_len = ctx->count * 2 + 3;
 	char* command_array[cmd_arr_len];
-	command_array[0] = "gcc ";
+	command_array[0] = COMPILER" ";
 
 	for (int idx = 0; idx < ctx->count; ++idx) {
 		char* file = ctx->files[idx];
@@ -154,24 +164,32 @@ void compile(Context* ctx) {
 	command_buffer[0] = '\0';
 	for (int i = 0; i < cmd_arr_len; ++i) strcat(command_buffer, command_array[i]);
 
-	printf("[INFO] Compiling: \"%s\"...\n", command_buffer);
+	printf("[INFO] Compiling: \"%s\"...\n-------------------------------\n", command_buffer);
 	int compile_code = system(command_buffer);
 	if (compile_code != 0) {
-		fprintf(stderr, "[ERROR] Compiler exited with code: %i\n", compile_code);
+		fprintf(stderr, "\n[ERROR] Compiler exited with code: %i\n", compile_code);
 		exit(1);
 	}
 
-	if (ctx->flags & COMPILE_EXECUTE != 0) {
+	if ((ctx->flags & COMPILE_EXECUTE) != 0) {
+		printf("\n");
 		system(TARGET);
+		printf("\n");
 	}
 }
 
 int main(int argc, char **argv) {
 	Context ctx = default_context(argc, argv);
-	rebuild_builder(&ctx);
+	char* builder[] = { SOURCE "build.c", SOURCE "misc.c" };
+	Vec builder_sources = vec_from_array(sizeof(char*), builder, 2);
 
+	rebuild_builder(&ctx, &builder_sources);
+
+	// printf("%s\n", builder_sources.values);
 	printf("[INFO] Adding files to build\n");
-	add_file("main.c", &ctx);
+	add_file(SOURCE "init.c", &ctx);
+	add_file(SOURCE "main.c", &ctx);
+	add_file(SOURCE "misc.c", &ctx);
 
 	compile(&ctx);
 	return 0;
