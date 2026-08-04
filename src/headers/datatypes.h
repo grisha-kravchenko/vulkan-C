@@ -2,6 +2,7 @@
 #define P_DATATYPES 1
 
 #include <vulkan/vulkan_core.h>
+#include <GLFW/glfw3.h>
 #include <stdlib.h>
 
 typedef uint32_t u32;
@@ -14,25 +15,22 @@ typedef int8_t i8;
 typedef size_t usize;
 
 typedef struct {
-	usize count;
-	usize capacity;
-	void* values;
-	usize sizeof_member;
-} Vec;
-
-typedef struct {
-	usize count;
-	void* value;
-	usize sizeof_member;
-} Iter;
-
-typedef struct {
-	VkInstance       instance;
-	VkPhysicalDevice physical_device;
-	VkDevice         device;
-	VkQueue          queue;
+    GLFWwindow*      window;
+    VkImage*         images;
+    VkSemaphore*     submit_semaphores;
+    u32              queue_family_index;
+    VkInstance       instance;
+    VkPhysicalDevice physical_device;
+    VkDevice         device;
+    VkQueue          queue;
+    VkSwapchainKHR   swapchain;
+    VkSurfaceKHR     surface;
+    VkSemaphore      image_aviable;
+    VkCommandPool    cmd_pool;
+    VkCommandBuffer  cmd_buffer;
+    VkFence          frame_fence;
 #ifdef DEBUG
-	VkDebugUtilsMessengerEXT debug_messenger;
+    VkDebugUtilsMessengerEXT debug_messenger;
 #endif
 } Program;
 

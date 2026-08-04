@@ -13,211 +13,223 @@
 #define BUILD_EXECUTABLE "./build"
 
 typedef enum {
-	COMPILE_EXECUTE = 1,
+    COMPILE_EXECUTE = 1,
 } CompilerFlags;
 
 typedef struct {
-	char* args;
-	char** files;
-	CompilerFlags flags;
-	size_t count;
-	char* argv;
+    char* args;
+    char** files;
+    char** headers;
+    char* argv;
+    CompilerFlags flags;
 } Context;
 
 void print_help() {
-	printf(
-		"This is a basic build script for the program. Usage:\n"
-		"	"BUILD_EXECUTABLE"   - just compile the program into "TARGET"\n"
-		"	-r/--run   - run the program right after the compilation\n"
-		"	-d/--debug - compile in debug mode\n"
-		"	-g         - attach debugger\n"
-		"	-h/--help  - print this help message\n"
-	);
+    printf(
+        "This is a basic build script for the program. Usage:\n"
+        "    "BUILD_EXECUTABLE"   - just compile the program into "TARGET"\n"
+        "    -r/--run   - run the program right after the compilation\n"
+        "    -d/--debug - compile in debug mode\n"
+        "    -g         - attach debugger\n"
+        "    -h/--help  - print this help message\n"
+    );
 }
 
 Context default_context(int argc, char** argv) {
-	Vec args_vec = vec_new(sizeof(char*));
-	vec_push_str(&args_vec, "-lvulkan -lglfw -O3 ");
+    char* args = NULL;
+    vec_concat_str(args, "-lvulkan -lglfw -lm -O3 ");
 
-	CompilerFlags flags = 0;
-	char* argv_array[(argc - 1) * 2];
+    CompilerFlags flags = 0;
+    char* argv_str = NULL;
 
-	for (int i = 1; i < argc; ++i) {
-		char* flag = argv[i];
+    while (argc > 1) {
+        shift(argv, argc);
+        char* flag = argv[0];
 
-		if (strcmp(flag, "-h") == 0 || strcmp(flag, "--help") == 0) {
-			print_help();
-			exit(0);
-		} else if (strcmp(flag, "-r") == 0 || strcmp(flag, "--run") == 0) {
-			flags |= COMPILE_EXECUTE;
-		} else if (strcmp(flag, "-d") == 0 || strcmp(flag, "--debug") == 0) {
-			vec_push_str(&args_vec, "-DDEBUG ");
-		} else if (strcmp(flag, "-g") == 0) {
-			vec_push_str(&args_vec, "-g ");
-		} else {
-			fprintf(stderr, "[ERROR] unknown flag: %s\n", flag);
-			print_help();
-			exit(1);
-		}
+        if (strcmp(flag, "-h") == 0 || strcmp(flag, "--help") == 0) {
+            print_help();
+            exit(0);
+        } else if (strcmp(flag, "-r") == 0 || strcmp(flag, "--run") == 0) {
+            flags |= COMPILE_EXECUTE;
+        } else if (strcmp(flag, "-d") == 0 || strcmp(flag, "--debug") == 0) {
+            vec_concat_str(args, "-DDEBUG ");
+        } else if (strcmp(flag, "-g") == 0) {
+            vec_concat_str(args, "-g ");
+        } else {
+            fprintf(stderr, "[ERROR] unknown flag: %s\n", flag);
+            print_help();
+            exit(1);
+        }
 
-		argv_array[(i - 1) * 2] = " ";
-		argv_array[(i - 1) * 2 + 1] = flag;
-	}
+        vec_concat_str(argv_str, " ");
+        vec_concat_str(argv_str, flag);
+    }
 
-	char* args = vec_to_str(&args_vec);
-	vec_free(&args_vec);
+    Context ctx = {
+        .args = args,
+        .files = NULL,
+        .headers = NULL,
+        .flags = flags,
+        .argv = argv_str,
+    };
 
-	size_t argv_size = 1;
-	for (int i = 0; i < (argc - 1) * 2; ++i) argv_size += strlen(argv_array[i]);
-
-	char* argv_buffer = malloc(argv_size);
-	if (argv_buffer == NULL) {
-		perror("[ERROR] Couldn't allocate argv string buffer");
-		exit(1);
-	}
-	argv_buffer[0] = '\0';
-	for (int i = 0; i < (argc - 1) * 2; ++i) strcat(argv_buffer, argv_array[i]);
-
-	Context ctx = {
-		.args = args,
-		.files = NULL,
-		.flags = flags,
-		.count = 0,
-		.argv = argv_buffer,
-	};
-
-	return ctx;
+    return ctx;
 }
 
-int should_rebuild_builder(Vec* build_sources) {
-	struct stat src_stat;
-	struct stat dst_stat;
-
-	if (stat(BUILD_EXECUTABLE, &dst_stat) == -1) {
-		if (errno == ENOENT) return 1; // no executable found
-		perror("[ERROR] Couldn't get stat of "BUILD_EXECUTABLE);
-		exit(1);
-	}
-
-	time_t dst_time = dst_stat.st_mtime;
-
-	char** source;
-	Iter iter = vec_iter(build_sources);
-	while ((source = iter_next(&iter)) != NULL) {
-		if (stat(*source, &src_stat) == -1) {
-			char* err[] = { "[ERROR] Couldn't get stat of ", *source };
-			Vec err_vec = vec_from_array(sizeof(char*), err, 2);
-			perror(vec_to_str(&err_vec));
-			exit(1);
-		}
-
-		time_t src_time = src_stat.st_mtime;
-		if (src_time > dst_time) return 1;
-	}
-
-	return 0;
+void free_ctx(Context* ctx) {
+    vec_free(ctx->headers);
+    vec_free(ctx->files);
+    vec_free(ctx->argv);
+    vec_free(ctx->args);
 }
 
-void rebuild_builder(Context* ctx, Vec* build_sources) {
-	if (!should_rebuild_builder(build_sources)) return;
-	printf("[INFO] Rebuilding the builder...\n");
+int should_rebuild_builder(Context* ctx) {
+    struct stat src_stat;
+    struct stat dst_stat;
 
-	Vec sources = vec_new(sizeof(char*));
-	vec_push_str(&sources, COMPILER" ");
+    if (stat(BUILD_EXECUTABLE, &dst_stat) == -1) {
+        if (errno == ENOENT) return 1; // no executable found
+        perror("[ERROR] Couldn't get stat of "BUILD_EXECUTABLE);
+        exit(1);
+    }
 
-	Iter sources_iter = vec_iter(build_sources);
-	char** source;
-	while ((source = iter_next(&sources_iter)) != NULL) {
-		vec_push(&sources, source);
-		vec_push_str(&sources, " ");
-	}
-	vec_push_str(&sources, "-o "BUILD_EXECUTABLE);
-	char* cmd = vec_to_str(&sources);
-	vec_free(&sources);
+    time_t dst_time = dst_stat.st_mtime;
 
-	printf("[INFO] Running \"%s\"\n", cmd);
-	system(cmd); // build the build script
-	printf("[INFO] Compiled the builder executable: "BUILD_EXECUTABLE"\n");
-	if (should_rebuild_builder(build_sources)) {
-		fprintf(stderr, "[ERROR] Need to rebuild executable after it was rebuilt\n");
-		fprintf(stderr, "[ERROR] There is likely a problem inside compilation\n");
-		exit(1);
-	}
+    char** source = ctx->files;
+    size_t build_sources_len = vec_len(ctx->files);
+    while (build_sources_len > 0) {
+        if (stat(*source, &src_stat) == -1) {
+            char* err = NULL;
+            vec_concat_str(err, "[ERROR] Couldn't get stat of ");
+            vec_concat_str(err, *source);
+            perror(err);
+            exit(1);
+        }
 
-	if (strcmp(ctx->argv, "") != 0) {
-		int executable_len = strlen(BUILD_EXECUTABLE) + strlen(ctx->argv) + 1;
-		char command[executable_len];
-		command[0] = '\0';
-		strcat(command, BUILD_EXECUTABLE);
-		strcat(command, ctx->argv);
+        time_t src_time = src_stat.st_mtime;
+        if (src_time > dst_time) return 1;
 
-		system(command);
-	} else system(BUILD_EXECUTABLE);
+        shift(source, build_sources_len);
+    }
+    if (ctx->headers == NULL) return 0;
 
-	printf("[INFO] Exiting\n");
-	exit(0);
+    source = ctx->headers;
+    build_sources_len = vec_len(ctx->headers);
+    while (build_sources_len > 0) {
+        if (stat(*source, &src_stat) == -1) {
+            char* err = NULL;
+            vec_concat_str(err, "[ERROR] Couldn't get stat of ");
+            vec_concat_str(err, *source);
+            perror(err);
+            exit(1);
+        }
+
+        time_t src_time = src_stat.st_mtime;
+        if (src_time > dst_time) return 1;
+
+        shift(source, build_sources_len);
+    }
+
+    return 0;
 }
 
-void add_file(char* file, Context* ctx) {
-	ctx->files = realloc(
-		ctx->files,
-		(++ctx->count) * sizeof(char*)
-	);
-	if (ctx->files == NULL) exit(2);
-	ctx->files[ctx->count - 1] = file;
+void rebuild_builder(Context* ctx) {
+    if (!should_rebuild_builder(ctx)) return;
+    printf("[INFO] Rebuilding the builder...\n");
+
+    char* cmd = NULL;
+    vec_concat_str(cmd, COMPILER" ");
+
+    char** sources = ctx->files;
+    size_t sources_len = vec_len(ctx->files);
+    while (sources_len > 0) {
+        vec_concat_str(cmd, *sources);
+        vec_concat_str(cmd, " ");
+
+        shift(sources, sources_len);
+    }
+    vec_concat_str(cmd, "-o "BUILD_EXECUTABLE);
+
+    printf("[INFO] Running \"%s\"\n", cmd);
+    system(cmd); // build the build script
+    vec_free(cmd);
+    printf("[INFO] Compiled the builder executable: "BUILD_EXECUTABLE"\n");
+
+    if (should_rebuild_builder(ctx)) {
+        fprintf(stderr, "[ERROR] Need to rebuild executable after it was rebuilt\n");
+        fprintf(stderr, "[ERROR] There is likely a problem inside compilation\n");
+        exit(1);
+    }
+
+    if (ctx->argv != NULL) {
+        int executable_len = strlen(BUILD_EXECUTABLE) + strlen(ctx->argv) + 1;
+        char command[executable_len];
+        command[0] = '\0';
+        strcat(command, BUILD_EXECUTABLE);
+        strcat(command, ctx->argv);
+
+        system(command);
+    } else system(BUILD_EXECUTABLE);
+
+    printf("[INFO] Exiting\n");
+    exit(0);
 }
+
 
 void compile(Context* ctx) {
-	printf("[INFO] Compiling the project\n");
-	size_t cmd_arr_len = ctx->count * 2 + 3;
-	char* command_array[cmd_arr_len];
-	command_array[0] = COMPILER" ";
+    printf("[INFO] Compiling the project\n");
+    char* cmd = NULL;
+    vec_concat_str(cmd, COMPILER" ");
 
-	for (int idx = 0; idx < ctx->count; ++idx) {
-		char* file = ctx->files[idx];
-		printf("[INFO] Adding %s to compilation command\n", file);
-		command_array[idx*2 + 1] = file;
-		command_array[idx*2 + 2] = " ";
-	}
+    char** files = ctx->files;
+    size_t files_len = vec_len(files);
 
-	command_array[cmd_arr_len - 2] = ctx->args;
-	command_array[cmd_arr_len - 1] = " -o "TARGET;
+    while (files_len > 0) {
+        printf("[INFO] Adding %s to compilation command\n", *files);
+        vec_concat_str(cmd, *files);
+        vec_concat_str(cmd, " ");
+        shift(files, files_len);
+    }
 
-	size_t cmd_buf_len = 1; // null terminator
-	for (int i = 0; i < cmd_arr_len; ++i) cmd_buf_len += strlen(command_array[i]);
+    vec_concat_str(cmd, ctx->args);
+    vec_concat_str(cmd, " -o "TARGET);
 
-	char command_buffer[cmd_buf_len];
-	command_buffer[0] = '\0';
-	for (int i = 0; i < cmd_arr_len; ++i) strcat(command_buffer, command_array[i]);
+    printf("[INFO] Compiling: \"%s\"...\n-------------------------------\n", cmd);
+    int compile_code = system(cmd);
+    vec_free(cmd);
 
-	printf("[INFO] Compiling: \"%s\"...\n-------------------------------\n", command_buffer);
-	int compile_code = system(command_buffer);
-	if (compile_code != 0) {
-		fprintf(stderr, "\n[ERROR] Compiler exited with code: %i\n", compile_code);
-		exit(1);
-	}
+    if (compile_code != 0) {
+        fprintf(stderr, "\n[ERROR] Compiler exited with code: %i\n", compile_code);
+        exit(1);
+    }
 
-	if ((ctx->flags & COMPILE_EXECUTE) != 0) {
-		printf("\n");
-		system(TARGET);
-		printf("\n");
-	}
+    if ((ctx->flags & COMPILE_EXECUTE) != 0) {
+        printf("\n");
+        system(TARGET);
+        printf("\n");
+    }
 }
 
 int main(int argc, char **argv) {
-	Context ctx = default_context(argc, argv);
-	char* builder[] = { SOURCE "misc.c", SOURCE "build.c" };
-	Vec builder_sources = vec_from_array(sizeof(char*), builder, 2);
+    Context ctx = default_context(argc, argv);
+    Context builder_ctx = default_context(argc, argv);
 
-	rebuild_builder(&ctx, &builder_sources);
+    vec_push(builder_ctx.files, SOURCE "build.c");
+    vec_push(builder_ctx.headers, SOURCE "headers/misc.h");
 
-	// printf("%s\n", builder_sources.values);
-	printf("[INFO] Adding files to build\n");
-	add_file(SOURCE "init.c",        &ctx);
-	add_file(SOURCE "main.c",        &ctx);
-	add_file(SOURCE "misc.c",        &ctx);
-	add_file(SOURCE "vulkan_misc.c", &ctx);
+    rebuild_builder(&builder_ctx);
+    free_ctx(&builder_ctx);
 
-	compile(&ctx);
-	return 0;
+    // printf("%s\n", builder_sources.values);
+    printf("[INFO] Adding files to build\n");
+
+    vec_push(ctx.files, SOURCE "init.c");
+    vec_push(ctx.files, SOURCE "main.c");
+    vec_push(ctx.files, SOURCE "vulkan_misc.c");
+    vec_push(ctx.files, SOURCE "window.c");
+    printf("[INFO] Added files to build\n");
+
+    compile(&ctx);
+    free_ctx(&ctx);
+    return 0;
 }
