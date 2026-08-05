@@ -1,6 +1,12 @@
 # Vulkan renderer
 Simple vulkan rendering project written in pure C.
 
+## Current capabilities
+Current code only creates semi-animated window filled with
+color dependent on time. The code is currently only
+works with linux wayland, which is going to be changed
+soon.
+
 ## Build the project
 *Warning: build script is written for linux only.*
 
