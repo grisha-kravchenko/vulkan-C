@@ -131,7 +131,7 @@ char* cmd_append_counted(char* cmd, size_t count, const char* args[]) {
 }
 
 int cmd_run(char* cmd) {
-    printf("[CMD] %s\n", cmd);
+    printf("[CMD]: %s\n", cmd);
     vec_len(cmd) = 0;
     return system(cmd);
 }
@@ -181,16 +181,21 @@ int cmd_run_conditional(char* cmd, char** sources, char** outputs) {
     return cmd_run(cmd);
 }
 
-#define rebuild_builder(target, ...) rebuild_builder_counted(target, sizeof((const char*[]){__FILE__, __VA_ARGS__})/sizeof(const char*), (const char*[]){__FILE__, __VA_ARGS__})
-void rebuild_builder_counted(char* target, size_t sources_count, const char* sources[]) {
+#define rebuild_builder(argc, argv, ...) rebuild_builder_counted(argc, argv, sizeof((const char*[]){__FILE__, __VA_ARGS__})/sizeof(const char*), (const char*[]){__FILE__, __VA_ARGS__})
+void rebuild_builder_counted(int argc, char** argv, size_t sources_count, const char* sources[]) {
     int should_run = 0;
     for (size_t i = 0; i < sources_count; ++i)
-    if (compare_dates(target, (char*)sources[i])) {
+    if (compare_dates(argv[0], (char*)sources[i])) {
         should_run = 1;
         break;
     };
+
     if (should_run == 0) return;
-    try(!cmd_execute("gcc", "-o", target, sources[0], "&&", target), "Couldn't compile build executable");
+    char* cmd = NULL;
+    cmd = cmd_append(cmd, "gcc", "-o", argv[0], sources[0], "&&");
+    cmd = cmd_append_counted(cmd, (size_t)argc, (const char**)argv);
+
+    try(!cmd_run(cmd), "Couldn't compile build executable");
     exit(0);
 }
 

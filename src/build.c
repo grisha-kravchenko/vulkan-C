@@ -28,7 +28,7 @@ FLAGS get_flags(int argc, char** argv) {
     FLAGS ret = 0;
 
     while (argc > 1) {
-        shift(argc, argv);
+        shift(argv, argc);
         if (strcmp(argv[0], "-h") == 0 || strcmp(argv[0], "-help") == 0) {
             print_help();
             exit(0);
@@ -48,7 +48,7 @@ FLAGS get_flags(int argc, char** argv) {
 }
 
 int main(int argc, char **argv) {
-    rebuild_builder(argv[0], "src/headers/misc.h");
+    rebuild_builder(argc, argv, "src/headers/misc.h");
     FLAGS flags = get_flags(argc, argv);
 
     char* cmd = NULL;
@@ -56,9 +56,9 @@ int main(int argc, char **argv) {
     cmd = cmd_append(cmd, "src/init.c", "src/main.c", "src/vulkan_misc.c", "src/window.c");
     cmd = cmd_append(cmd, "-O3", "-lvulkan", "-lglfw", "-lm");
 
-    if (flags && DEBUG) cmd = cmd_append(cmd, "-DDEBUG");
+    if (flags && DEBUG)    cmd = cmd_append(cmd, "-DDEBUG");
     if (flags && DEBUGGER) cmd = cmd_append(cmd, "-g");
-    if (flags && RUN) cmd = cmd_append(cmd, "&&", TARGET);
+    if (flags && RUN)      cmd = cmd_append(cmd, "&&", TARGET);
     cmd_run(cmd);
 
     return 0;
