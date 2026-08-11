@@ -157,8 +157,6 @@ void window_code(Program* program) {
 
         glfwPollEvents();
     }
-
-    vkWaitForFences(program->device, 1, &program->frame_fence, VK_TRUE, UINT64_MAX);
 }
 
 void create_swapchain(Program* program) {

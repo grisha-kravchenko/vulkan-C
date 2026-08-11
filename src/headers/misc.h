@@ -105,23 +105,43 @@ static inline char* vec_to_str(char** vec) {
         str_len += strlen(vec[i]);
 
     char* string = malloc(str_len);
+    string[0] = '\0';
     try(string, "Couln't allocate string")
 
     for (size_t i = 0; i < vec_len(vec); ++i)
-        strcpy(string, vec[i]);
+        strcat(string, vec[i]);
 
     return string;
 }
 
 
+# ifdef BUILD_SCRIPT_IMPLEMENTATION
+# define BUILD_SCRIPT
+# endif
+
 # ifdef BUILD_SCRIPT
 # undef BUILD_SCRIPT
+
+#define cmd_append(cmd, ...) cmd_append_counted(cmd, sizeof((const char*[]){__VA_ARGS__})/sizeof(const char*), (const char*[]){__VA_ARGS__})
+#define cmd_execute(...) cmd_execute_counted(sizeof((const char*[]){__VA_ARGS__})/sizeof(const char*), (const char*[]){__VA_ARGS__})
+#define rebuild_builder(argc, argv, ...) rebuild_builder_counted(argc, argv, sizeof((const char*[]){__FILE__, __VA_ARGS__})/sizeof(const char*), (const char*[]){__FILE__, __VA_ARGS__})
+
+char* cmd_append_counted(char* cmd, size_t count, const char* args[]);
+int cmd_run(char* cmd);
+int cmd_execute_counted(size_t count, const char* cmds[]);
+int compare_dates(char* file1, char* file2);
+int cmd_run_conditional(char* cmd, char** sources, char** outputs);
+void rebuild_builder_counted(int argc, char** argv, size_t sources_count, const char* sources[]);
+
+# endif
+
+# ifdef BUILD_SCRIPT_IMPLEMENTATION
+# undef BUILD_SCRIPT_IMPLEMENTATION
 
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <errno.h>
 
-#define cmd_append(cmd, ...) cmd_append_counted(cmd, sizeof((const char*[]){__VA_ARGS__})/sizeof(const char*), (const char*[]){__VA_ARGS__})
 char* cmd_append_counted(char* cmd, size_t count, const char* args[]) {
     for (size_t i = 0; i < count; ++i) {
         vec_concat_str(cmd, args[i]);
@@ -136,7 +156,6 @@ int cmd_run(char* cmd) {
     return system(cmd);
 }
 
-#define cmd_execute(...) cmd_execute_counted(sizeof((const char*[]){__VA_ARGS__})/sizeof(const char*), (const char*[]){__VA_ARGS__})
 int cmd_execute_counted(size_t count, const char* cmds[]) {
     char* cmd = NULL;
     cmd = cmd_append_counted(cmd, count, cmds);
@@ -152,13 +171,13 @@ int compare_dates(char* file1, char* file2) {
 
     if (stat(file1, &file1_stat) == -1) {
         if (errno == ENOENT) return 1;
-        perror("[ERROR] Couldn't get stat of file 1");
+        perror("[ERROR]: Couldn't get stat of file 1");
         exit(1);
     }
 
     if (stat(file2, &file2_stat) == -1) {
         if (errno == ENOENT) return 1;
-        perror("[ERROR] Couldn't get stat of file 2");
+        perror("[ERROR]: Couldn't get stat of file 2");
         exit(1);
     }
 
@@ -177,11 +196,13 @@ int cmd_run_conditional(char* cmd, char** sources, char** outputs) {
             break;
         }
     };
-    if (should_run == 0) return 0;
+    if (should_run == 0) {
+        vec_len(cmd) = 0;
+        return 0;
+    }
     return cmd_run(cmd);
 }
 
-#define rebuild_builder(argc, argv, ...) rebuild_builder_counted(argc, argv, sizeof((const char*[]){__FILE__, __VA_ARGS__})/sizeof(const char*), (const char*[]){__FILE__, __VA_ARGS__})
 void rebuild_builder_counted(int argc, char** argv, size_t sources_count, const char* sources[]) {
     int should_run = 0;
     for (size_t i = 0; i < sources_count; ++i)
@@ -192,10 +213,13 @@ void rebuild_builder_counted(int argc, char** argv, size_t sources_count, const 
 
     if (should_run == 0) return;
     char* cmd = NULL;
-    cmd = cmd_append(cmd, "gcc", "-o", argv[0], sources[0], "&&");
-    cmd = cmd_append_counted(cmd, (size_t)argc, (const char**)argv);
+    cmd = cmd_append(cmd, "gcc", "-o", argv[0], sources[0]);
 
     try(!cmd_run(cmd), "Couldn't compile build executable");
+
+    cmd = cmd_append_counted(cmd, (size_t)argc, (const char**)argv);
+    cmd_run(cmd);
+
     exit(0);
 }
 

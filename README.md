@@ -18,3 +18,8 @@ But afterwards building the project is just `./build`.
 The build script will recompile itself when modified.
 You can use `./build -r` to automatically run the compiled
 binary.
+
+## Additional notice
+The project uses [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator),
+and destributes its copy within a git repository.
+

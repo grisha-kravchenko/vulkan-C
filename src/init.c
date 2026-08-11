@@ -4,6 +4,7 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan_core.h>
 #include <vulkan/vulkan_wayland.h>
+#include "headers/thirdparty/vk_mem_alloc.h"
 
 #include "headers/datatypes.h"
 #include "headers/misc.h"
@@ -90,14 +91,14 @@ void initialise(Program* program) {
     };
 
     VkInstanceCreateInfo create_info = {
-        VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, NULL,
-        0, &app_info,
+        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .pApplicationInfo = &app_info,
 #ifdef DEBUG
-        enabled_layers_len, (char const **)enabled_layers,
-#else
-        0, NULL,
+        .enabledLayerCount = enabled_layers_len,
+        .ppEnabledLayerNames = (char const **)enabled_layers,
 #endif
-        vec_len(instance_extensions), instance_extensions,
+        .enabledExtensionCount = vec_len(instance_extensions),
+        .ppEnabledExtensionNames = instance_extensions,
     };
     chk(vkCreateInstance(&create_info, NULL, &program->instance));
     vec_free(instance_extensions);
@@ -113,6 +114,7 @@ void initialise(Program* program) {
 
     u32 selected_device = 0;
     i32 type = 999;
+
     for (u32 i = 0; i < device_count; ++i) {
         VkPhysicalDeviceProperties propeties = {0};
         vkGetPhysicalDeviceProperties(devices[i], &propeties);
@@ -215,7 +217,6 @@ void initialise(Program* program) {
     };
 
     vkCreateSemaphore(program->device, &sem_create_info, NULL, &program->image_aviable);
-    // vkCreateSemaphore(program->device, &sem_create_info, NULL, &program->render_finished);
 
     VkCommandPoolCreateInfo cmd_pool_create_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
