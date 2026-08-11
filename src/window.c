@@ -20,6 +20,7 @@ static void error_callback(int error, const char* description) {
 void init_glfw(Program* program) {
     try(glfwInit(), "Couldn't initialise glfw");
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // disable opengl
+    // glfwWindowHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
 
 #ifdef DEBUG // setup debugger
     glfwSetErrorCallback(error_callback);

@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <assert.h>
 
-
 typedef struct {
     size_t count;
     size_t capacity;
@@ -65,13 +64,13 @@ typedef struct {
 } while (0)
 
 #define vec_concat_str(vector, ptr) do {                   \
-    if ((vector) == NULL) vec_sized((vector), 32);         \
+    if ((vector) == NULL) vec_sized(vector, 32);           \
     vec_concat_array((vector), (ptr), strlen(ptr) + 1);    \
     vec_len(vector)--;                                     \
 } while (0)
 
 #define vec_concat(vector, other) do {                     \
-    if ((other) == NULL) vec_sized(other, 32);             \
+    if ((vector) == NULL) vec_sized(vector, 32);           \
     ArrayHeader* __header2 = (ArrayHeader*)(other) - 1;    \
     vec_concat_array(vector, other, __header2->count)      \
 } while (0)
@@ -89,5 +88,112 @@ typedef struct {
 } while (0)
 
 #define shift(ptr, count) do { try((count) > 0, "Called shift with less than 0 count"); (ptr)++; (count)--; } while (0)
+
+#define new_vec(type, ...) (void*)((ArrayHeader *)(&(struct {               \
+    size_t count;                                                           \
+    size_t capacity;                                                        \
+    type data[sizeof((const char*[]){__VA_ARGS__})/sizeof(const char*)];    \
+}) {                                                                        \
+    .count = sizeof((const char*[]){__VA_ARGS__})/sizeof(const char*),      \
+    .capacity = 0,                                                          \
+    __VA_ARGS__                                                             \
+}) + 1)
+
+static inline char* vec_to_str(char** vec) {
+    size_t str_len = 1; // Null terminator
+    for (size_t i = 0; i < vec_len(vec); ++i)
+        str_len += strlen(vec[i]);
+
+    char* string = malloc(str_len);
+    try(string, "Couln't allocate string")
+
+    for (size_t i = 0; i < vec_len(vec); ++i)
+        strcpy(string, vec[i]);
+
+    return string;
+}
+
+
+# ifdef BUILD_SCRIPT
+# undef BUILD_SCRIPT
+
+#include <stdlib.h>
+#include <sys/stat.h>
+#include <errno.h>
+
+#define cmd_append(cmd, ...) cmd_append_counted(cmd, sizeof((const char*[]){__VA_ARGS__})/sizeof(const char*), (const char*[]){__VA_ARGS__})
+char* cmd_append_counted(char* cmd, size_t count, const char* args[]) {
+    for (size_t i = 0; i < count; ++i) {
+        vec_concat_str(cmd, args[i]);
+        vec_concat_str(cmd, " ");
+    }
+    return cmd;
+}
+
+int cmd_run(char* cmd) {
+    printf("[CMD] %s\n", cmd);
+    vec_len(cmd) = 0;
+    return system(cmd);
+}
+
+#define cmd_execute(...) cmd_execute_counted(sizeof((const char*[]){__VA_ARGS__})/sizeof(const char*), (const char*[]){__VA_ARGS__})
+int cmd_execute_counted(size_t count, const char* cmds[]) {
+    char* cmd = NULL;
+    cmd = cmd_append_counted(cmd, count, cmds);
+
+    int ret_code = cmd_run(cmd);
+    vec_free(cmd);
+    return ret_code;
+}
+
+int compare_dates(char* file1, char* file2) {
+    struct stat file1_stat;
+    struct stat file2_stat;
+
+    if (stat(file1, &file1_stat) == -1) {
+        if (errno == ENOENT) return 1;
+        perror("[ERROR] Couldn't get stat of file 1");
+        exit(1);
+    }
+
+    if (stat(file2, &file2_stat) == -1) {
+        if (errno == ENOENT) return 1;
+        perror("[ERROR] Couldn't get stat of file 2");
+        exit(1);
+    }
+
+    time_t file1_time = file1_stat.st_mtime;
+    time_t file2_time = file2_stat.st_mtime;
+
+    return file1_time < file2_time;
+}
+
+int cmd_run_conditional(char* cmd, char** sources, char** outputs) {
+    int should_run = 0;
+    for (size_t i = 0; i < vec_len(outputs); ++i)
+    for (size_t j = 0; j < vec_len(sources); ++j) {
+        if (compare_dates(outputs[i], sources[j])) {
+            should_run = 1;
+            break;
+        }
+    };
+    if (should_run == 0) return 0;
+    return cmd_run(cmd);
+}
+
+#define rebuild_builder(target, ...) rebuild_builder_counted(target, sizeof((const char*[]){__FILE__, __VA_ARGS__})/sizeof(const char*), (const char*[]){__FILE__, __VA_ARGS__})
+void rebuild_builder_counted(char* target, size_t sources_count, const char* sources[]) {
+    int should_run = 0;
+    for (size_t i = 0; i < sources_count; ++i)
+    if (compare_dates(target, (char*)sources[i])) {
+        should_run = 1;
+        break;
+    };
+    if (should_run == 0) return;
+    try(!cmd_execute("gcc", "-o", target, sources[0], "&&", target), "Couldn't compile build executable");
+    exit(0);
+}
+
+# endif
 
 #endif

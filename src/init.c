@@ -86,7 +86,7 @@ void initialise(Program* program) {
     VkApplicationInfo app_info = {
         VK_STRUCTURE_TYPE_APPLICATION_INFO, NULL,
         "Vulkan & C! :D", 1, "Vulkan-C engine", 1,
-        VK_API_VERSION_1_4
+        VK_API_VERSION_1_3
     };
 
     VkInstanceCreateInfo create_info = {
@@ -190,10 +190,6 @@ void initialise(Program* program) {
         .synchronization2 = VK_TRUE,
         .dynamicRendering = VK_TRUE,
     };
-    VkPhysicalDeviceVulkan14Features enabled_14_features = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
-        .pNext = &enabled_13_features,
-    };
     VkPhysicalDeviceFeatures enabled_10_features = {
         .samplerAnisotropy = VK_TRUE,
     };
@@ -204,7 +200,7 @@ void initialise(Program* program) {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pQueueCreateInfos = &queue_create_info,
         .queueCreateInfoCount = 1,
-        .pNext = &enabled_14_features,
+        .pNext = &enabled_13_features,
         .ppEnabledExtensionNames = device_extensions,
         .enabledExtensionCount = 1,
         .pEnabledFeatures = &enabled_10_features,
