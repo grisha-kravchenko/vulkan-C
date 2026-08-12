@@ -4,6 +4,7 @@
 
 #include "headers/datatypes.h"
 #include "headers/misc.h"
+#include "headers/thirdparty/vk_mem_alloc.h"
 
 void chk_raw(VkResult result, char* file, u32 line) {
     if (result == VK_SUCCESS) return;
@@ -28,6 +29,7 @@ void on_close(Program *program) {
     vkDestroyCommandPool(program->device, program->cmd_pool, NULL);
 
     vkDestroyDevice(program->device, NULL);
+    vmaDestroyAllocator(program->allocator);
 
     glfwDestroyWindow(program->window);
     glfwTerminate();

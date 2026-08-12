@@ -188,6 +188,8 @@ int compare_dates(char* file1, char* file2) {
 }
 
 int cmd_run_conditional(char* cmd, char** sources, char** outputs) {
+    if (vec_len(sources) == 0 || vec_len(outputs) == 0) return cmd_run(cmd);
+
     int should_run = 0;
     for (size_t i = 0; i < vec_len(outputs); ++i)
     for (size_t j = 0; j < vec_len(sources); ++j) {

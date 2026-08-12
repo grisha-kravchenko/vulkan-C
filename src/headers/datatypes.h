@@ -4,6 +4,7 @@
 #include <vulkan/vulkan_core.h>
 #include <GLFW/glfw3.h>
 #include <stdlib.h>
+#include "thirdparty/vk_mem_alloc.h"
 
 typedef uint32_t u32;
 typedef int32_t i32;
@@ -18,6 +19,7 @@ typedef struct {
     GLFWwindow*      window;
     VkImage*         images;
     VkSemaphore*     submit_semaphores;
+    VmaAllocator     allocator;
     u32              queue_family_index;
     VkInstance       instance;
     VkPhysicalDevice physical_device;

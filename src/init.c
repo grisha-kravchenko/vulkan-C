@@ -212,6 +212,23 @@ void initialise(Program* program) {
     vkGetDeviceQueue(program->device, queue_family, 0, &program->queue);
     assert(program->queue);
 
+    VmaVulkanFunctions vk_functions = {
+        .vkGetInstanceProcAddr = vkGetInstanceProcAddr,
+        .vkGetDeviceProcAddr = vkGetDeviceProcAddr,
+        .vkCreateBuffer = vkCreateBuffer,
+        .vkCreateImage = vkCreateImage,
+    };
+
+    VmaAllocatorCreateInfo allocator_create_info = {
+        .physicalDevice = program->physical_device,
+        .device = program->device,
+        .instance = program->instance,
+        .pVulkanFunctions = &vk_functions,
+        .flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
+    };
+
+    vmaCreateAllocator(&allocator_create_info, &program->allocator);
+
     VkSemaphoreCreateInfo sem_create_info = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
     };
