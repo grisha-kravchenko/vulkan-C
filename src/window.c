@@ -68,6 +68,93 @@ void transition_image(Program* program, VkImage src_image, VkImageLayout old_lay
     vkCmdPipelineBarrier2(program->cmd_buffer, &dependency_info);
 }
 
+void create_descriptor_set(
+    VkDevice device,
+    DescriptorBindingLayout* layout, // Bindings vector: bindings per set
+    VkDescriptorSet* descriptor_set  // Output set
+) {
+    VkDescriptorSetLayoutBinding* bindings = NULL;
+    VkDescriptorBindingFlags* flags = NULL;
+    VkDescriptorPoolSize* pool_sizes = NULL;
+    u32* descriptor_counts = NULL;
+
+    // Preallocate the vector
+    vec_sized(bindings, vec_len(layout));
+    vec_sized(flags, vec_len(layout));
+    vec_sized(pool_sizes, vec_len(layout));
+    vec_sized(descriptor_counts, vec_len(layout));
+
+    for (size_t binding_i = 0; binding_i < vec_len(layout); ++binding_i) {
+        vec_push(flags, layout[binding_i].flags);
+
+        VkDescriptorSetLayoutBinding descriptor_layout_binding = {
+            .descriptorType = layout[binding_i].type,
+            .descriptorCount = layout[binding_i].descriptor_count,
+            .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+            .binding = layout[binding_i].binding,
+        };
+        vec_push(bindings, descriptor_layout_binding);
+
+        VkDescriptorPoolSize pool_size = {
+            .type = layout[binding_i].type,
+            .descriptorCount = layout[binding_i].descriptor_count,
+        };
+        vec_push(pool_sizes, pool_size);
+
+        vec_push(descriptor_counts, layout[binding_i].descriptor_count);
+    }
+
+    VkDescriptorSetLayoutBindingFlagsCreateInfo descriptor_binding_flags = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+        .bindingCount = vec_len(flags),
+        .pBindingFlags = flags,
+    };
+
+    VkDescriptorSetLayoutCreateInfo layout_create_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .pNext = &descriptor_binding_flags,
+        .bindingCount = vec_len(bindings),
+        .pBindings = bindings,
+    };
+
+    VkDescriptorSetLayout descriptor_layout;
+    chk(vkCreateDescriptorSetLayout(device, &layout_create_info, NULL, &descriptor_layout));
+
+    VkDescriptorPoolCreateInfo descriptor_pool_create_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets = 1, // I will leave it as 1 for now because I don't undestand
+        .poolSizeCount = vec_len(pool_sizes),
+        .pPoolSizes = pool_sizes,
+    };
+
+    VkDescriptorPool descriptor_pool;
+    chk(vkCreateDescriptorPool(device, &descriptor_pool_create_info, NULL, &descriptor_pool));
+
+    VkDescriptorSetVariableDescriptorCountAllocateInfo count_allocate_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO,
+        .descriptorSetCount = vec_len(descriptor_counts),
+        .pDescriptorCounts = descriptor_counts,
+    };
+
+    VkDescriptorSetAllocateInfo descriptor_allocate_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .pNext = &count_allocate_info,
+        .descriptorPool = descriptor_pool,
+        .descriptorSetCount = 1, // Same with maxSets, I don't understand
+        .pSetLayouts = &descriptor_layout,
+    };
+
+    chk(vkAllocateDescriptorSets(device, &descriptor_allocate_info, descriptor_set));
+
+    vec_free(flags);
+    vec_free(bindings);
+    vec_free(pool_sizes);
+    vec_free(descriptor_counts);
+
+    vkDestroyDescriptorSetLayout(device, descriptor_layout, NULL);
+    vkDestroyDescriptorPool(device, descriptor_pool, NULL);
+}
+
 void window_code(Program* program) {
     PFN_vkCmdClearColorImage vkCmdClearColorImage =
         (PFN_vkCmdClearColorImage)
@@ -91,30 +178,23 @@ void window_code(Program* program) {
         .pName = "main",
     };
 
-    VkDescriptorBindingFlags descriptor_binding_flag = { VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT };
-    VkDescriptorSetLayoutBindingFlagsCreateInfo descriptor_binding_flags = {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
-        .bindingCount = 1,
-        .pBindingFlags = &descriptor_binding_flag,
+    VkDescriptorSet descriptor_set;
+    DescriptorBindingLayout binding_layout = {
+        .binding = 1,
+        .descriptor_count = 1,
+        .flags = VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT,
+        .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
     };
 
-    VkDescriptorSetLayoutBinding descriptor_layout_binding = {
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+    create_descriptor_set(program->device, new_vec(DescriptorBindingLayout, binding_layout), &descriptor_set);
 
-    };
-
-    VkPipelineLayoutCreateInfo layout_create_info = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-
-    };
-
-    VkComputePipelineCreateInfo pipeline_info = {
-        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-        .layout = "",
-        .stage = stage_create_info,
-        .basePipelineHandle = VK_NULL_HANDLE,
-        .basePipelineIndex = -1,
-    };
+    // VkComputePipelineCreateInfo pipeline_info = {
+    //     .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+    //     .layout = descriptor_layout,
+    //     .stage = stage_create_info,
+    //     .basePipelineHandle = VK_NULL_HANDLE,
+    //     .basePipelineIndex = -1,
+    // };
 
     while (!glfwWindowShouldClose(program->window)) {
         double time = glfwGetTime();
@@ -259,3 +339,4 @@ void create_swapchain(Program* program) {
 
     // TODO: Attach depth buffer
 }
+

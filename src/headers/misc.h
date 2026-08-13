@@ -89,14 +89,14 @@ typedef struct {
 
 #define shift(ptr, count) do { try((count) > 0, "Called shift with less than 0 count"); (ptr)++; (count)--; } while (0)
 
-#define new_vec(type, ...) (void*)((ArrayHeader *)(&(struct {               \
-    size_t count;                                                           \
-    size_t capacity;                                                        \
-    type data[sizeof((const char*[]){__VA_ARGS__})/sizeof(const char*)];    \
-}) {                                                                        \
-    .count = sizeof((const char*[]){__VA_ARGS__})/sizeof(const char*),      \
-    .capacity = 0,                                                          \
-    __VA_ARGS__                                                             \
+#define new_vec(type, ...) (void*)((ArrayHeader *)(&(struct {    \
+    size_t count;                                                \
+    size_t capacity;                                             \
+    type data[sizeof((type[]){__VA_ARGS__})/sizeof(type)];       \
+}) {                                                             \
+    .count = sizeof((type[]){__VA_ARGS__})/sizeof(type),         \
+    .capacity = 0,                                               \
+    __VA_ARGS__                                                  \
 }) + 1)
 
 static inline char* vec_to_str(char** vec) {

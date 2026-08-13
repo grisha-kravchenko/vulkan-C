@@ -36,4 +36,11 @@ typedef struct {
 #endif
 } Program;
 
+typedef struct {
+    u32 binding;
+    u32 descriptor_count; // idrk
+    VkDescriptorBindingFlags flags;
+    VkDescriptorType type;
+} DescriptorBindingLayout; // Custom specification of descriptor layout that does not need to be allocated
+
 #endif

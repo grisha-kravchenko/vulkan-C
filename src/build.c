@@ -9,9 +9,9 @@
 #define TARGET "./target"
 
 typedef enum {
-    RUN = 1,
-    DEBUG = 2,
-    DEBUGGER = 4,
+    FLAG_RUN = 1,
+    FLAG_DEBUG = 2,
+    FLAG_DEBUGGER = 4,
 } FLAGS;
 
 void print_help() {
@@ -35,11 +35,11 @@ FLAGS get_flags(int argc, char** argv) {
             exit(0);
         }
 
-        else if (strcmp(argv[0], "-r")     == 0) ret |= RUN;
-        else if (strcmp(argv[0], "-run")   == 0) ret |= RUN;
-        else if (strcmp(argv[0], "-d")     == 0) ret |= DEBUG;
-        else if (strcmp(argv[0], "-debug") == 0) ret |= DEBUG;
-        else if (strcmp(argv[0], "-g")     == 0) ret |= DEBUGGER;
+        else if (strcmp(argv[0], "-r")     == 0) ret |= FLAG_RUN;
+        else if (strcmp(argv[0], "-run")   == 0) ret |= FLAG_RUN;
+        else if (strcmp(argv[0], "-d")     == 0) ret |= FLAG_DEBUG;
+        else if (strcmp(argv[0], "-debug") == 0) ret |= FLAG_DEBUG;
+        else if (strcmp(argv[0], "-g")     == 0) ret |= FLAG_DEBUGGER;
         else if (strcmp(argv[0], "-l")     == 0) {
             printf(
                 "[INFO]: Dependencies:\n"
@@ -75,16 +75,16 @@ int main(int argc, char **argv) {
 
     cmd = cmd_append(cmd, "slangc", "-o", "tmp/test.spv", "--", "src/shaders/test.slang", "&&");
     cmd = cmd_append(cmd, "xxd", "-i", "tmp/test.spv", ">", "tmp/test.pv.h");
-    cmd_run(cmd);
+    if (cmd_run(cmd)) return 1;
 
     cmd = cmd_append(cmd, "gcc", "-o", TARGET);
     cmd = cmd_append(cmd, "src/init.c", "src/main.c", "src/vulkan_misc.c", "src/window.c", "tmp/vma.o");
     cmd = cmd_append(cmd, "-O3", "-lvulkan", "-lglfw", "-lm");
 
-    if (flags & DEBUG)    cmd = cmd_append(cmd, "-DDEBUG");
-    if (flags & DEBUGGER) cmd = cmd_append(cmd, "-g");
+    if (flags & FLAG_DEBUG)    cmd = cmd_append(cmd, "-DDEBUG");
+    if (flags & FLAG_DEBUGGER) cmd = cmd_append(cmd, "-g");
     cmd_run(cmd);
-    if (flags & RUN) {
+    if (flags & FLAG_RUN) {
         cmd = cmd_append(cmd, TARGET);
         cmd_run(cmd);
     }
