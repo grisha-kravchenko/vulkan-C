@@ -13,8 +13,6 @@ void chk_raw(VkResult result, char* file, u32 line) {
 }
 
 void on_close(Program *program) {
-    vkDeviceWaitIdle(program->device);
-
     vkDestroySwapchainKHR(program->device, program->swapchain, NULL);
     vkDestroySurfaceKHR(program->instance, program->surface, NULL);
     vkFreeCommandBuffers(program->device, program->cmd_pool, 1, &program->cmd_buffer);

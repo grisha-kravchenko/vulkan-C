@@ -1,3 +1,4 @@
+#include <stdio.h>
 #define VK_USE_PLATFORM_WAYLAND_KHR
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -73,6 +74,7 @@ void create_descriptor_set(
     VkDevice device,
     DescriptorBindingLayout* layout, // Bindings vector: bindings per set
     VkDescriptorSet* descriptor_set,
+    VkDescriptorPool* descriptor_pool, // useless outside, but descriptor_set lifetime is tied to it
     VkDescriptorSetLayout* out_layout
 ) {
     VkDescriptorSetLayoutBinding* bindings = NULL;
@@ -128,8 +130,7 @@ void create_descriptor_set(
         .pPoolSizes = pool_sizes,
     };
 
-    VkDescriptorPool descriptor_pool;
-    chk(vkCreateDescriptorPool(device, &descriptor_pool_create_info, NULL, &descriptor_pool));
+    chk(vkCreateDescriptorPool(device, &descriptor_pool_create_info, NULL, descriptor_pool));
 
     VkDescriptorSetVariableDescriptorCountAllocateInfo count_allocate_info = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO,
@@ -140,7 +141,7 @@ void create_descriptor_set(
     VkDescriptorSetAllocateInfo descriptor_allocate_info = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .pNext = &count_allocate_info,
-        .descriptorPool = descriptor_pool,
+        .descriptorPool = *descriptor_pool,
         .descriptorSetCount = 1, // Same with maxSets, I don't understand
         .pSetLayouts = out_layout,
     };
@@ -151,8 +152,6 @@ void create_descriptor_set(
     vec_free(bindings);
     vec_free(pool_sizes);
     vec_free(descriptor_counts);
-
-    vkDestroyDescriptorPool(device, descriptor_pool, NULL);
 }
 
 // TODO: replace this function with a dynamic content-aware loop header
@@ -180,6 +179,7 @@ void window_code(Program* program) {
     };
 
     VkDescriptorSet descriptor_set;
+    VkDescriptorPool descriptor_pool;
     VkDescriptorSetLayout descriptor_set_layout;
     DescriptorBindingLayout binding_layout1 = {
         .binding = 1,
@@ -188,7 +188,7 @@ void window_code(Program* program) {
         .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
     };
 
-    create_descriptor_set(program->device, new_vec(DescriptorBindingLayout, binding_layout1), &descriptor_set, &descriptor_set_layout);
+    create_descriptor_set(program->device, new_vec(DescriptorBindingLayout, binding_layout1), &descriptor_set, &descriptor_pool, &descriptor_set_layout);
 
     VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -211,6 +211,10 @@ void window_code(Program* program) {
 
     VkPipeline compute_pipeline;
     chk(vkCreateComputePipelines(program->device, VK_NULL_HANDLE, 1, &pipeline_create_info, NULL, &compute_pipeline));
+
+    // VkWriteDescriptorSet* descriptor_set_writes = NULL;
+    // vec_sized(descriptor_set_writes, 1); // preallocate the vector, usefull when more than 1 descriptor set
+    VkWriteDescriptorSet descriptor_set_writes[1];
 
     while (!glfwWindowShouldClose(program->window)) {
         double time = glfwGetTime();
@@ -239,27 +243,68 @@ void window_code(Program* program) {
         VkCommandBufferBeginInfo begin_info = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
         vkBeginCommandBuffer(program->cmd_buffer, &begin_info);
 
-        VkImageSubresourceRange range = {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .baseMipLevel = 0,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-            .levelCount = 1
-        };
+        // VkImageSubresourceRange range = {
+        //     .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        //     .baseMipLevel = 0,
+        //     .baseArrayLayer = 0,
+        //     .layerCount = 1,
+        //     .levelCount = 1
+        // };
 
         // Actual drawing here
-        VkClearColorValue color = {(float)sin(time) / 2.0 + .5, .5, 1, 1};
+        // VkClearColorValue color = {(float)sin(time) / 2.0 + .5, .5, 1, 1};
 
         transition_image(program, program->images[image_index], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-        vkCmdClearColorImage(
-            program->cmd_buffer,
-            program->images[image_index],
-            VK_IMAGE_LAYOUT_GENERAL,
-            &color, 1, &range
-        );
+        // vkCmdClearColorImage(
+        //     program->cmd_buffer,
+        //     program->images[image_index],
+        //     VK_IMAGE_LAYOUT_GENERAL,
+        //     &color, 1, &range
+        // );
+
+        VkImageViewCreateInfo image_view_create_info = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .image = program->images[image_index],
+            .viewType = VK_IMAGE_VIEW_TYPE_2D,
+            .format = IMAGE_FORMAT,
+            .components.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+            .components.g = VK_COMPONENT_SWIZZLE_IDENTITY,
+            .components.b = VK_COMPONENT_SWIZZLE_IDENTITY,
+            .components.a = VK_COMPONENT_SWIZZLE_IDENTITY,
+            .subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .subresourceRange.baseMipLevel = 0,
+            .subresourceRange.baseArrayLayer = 0,
+            .subresourceRange.layerCount = 1,
+            .subresourceRange.levelCount = 1,
+        };
+
+        VkImageView image_view;
+        chk(vkCreateImageView(program->device, &image_view_create_info, NULL, &image_view));
+
+        VkDescriptorImageInfo out_img = {
+            .imageView = image_view,
+            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+        };
+
+        descriptor_set_writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptor_set_writes[0].dstSet = descriptor_set;
+        descriptor_set_writes[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        descriptor_set_writes[0].dstBinding = 1;
+        descriptor_set_writes[0].dstArrayElement = 0;
+        descriptor_set_writes[0].descriptorCount = 1;
+        descriptor_set_writes[0].pImageInfo = &out_img;
+
+        vkUpdateDescriptorSets(program->device, 1, descriptor_set_writes, 0, NULL);
+
+        vkCmdBindPipeline(program->cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, compute_pipeline);
+        vkCmdBindDescriptorSets(program->cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout, 0, 1, &descriptor_set, 0, NULL);
+
+        vkCmdDispatch(program->cmd_buffer, 16, 16, 1);
 
         transition_image(program, program->images[image_index], VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
         vkEndCommandBuffer(program->cmd_buffer);
+
+        vkDestroyImageView(program->device, image_view, NULL);
 
         VkPipelineStageFlags wait_stages[] = {
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
@@ -296,7 +341,11 @@ void window_code(Program* program) {
         glfwPollEvents();
     }
 
+    // vec_free(descriptor_set_writes);
+    vkDeviceWaitIdle(program->device);
+
     vkDestroyShaderModule(program->device, shader, NULL);
+    vkDestroyDescriptorPool(program->device, descriptor_pool, NULL);
     vkDestroyDescriptorSetLayout(program->device, descriptor_set_layout, NULL);
     vkDestroyPipelineLayout(program->device, pipeline_layout, NULL);
     vkDestroyPipeline(program->device, compute_pipeline, NULL);
@@ -312,6 +361,8 @@ void create_swapchain(Program* program) {
         image_size.width = (u32)width;
         image_size.height = (u32)height;
     }
+
+    program->image_format = image_size;
 
     VkSwapchainCreateInfoKHR create_info = {
         .sType          = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,

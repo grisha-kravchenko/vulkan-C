@@ -21,6 +21,7 @@ typedef struct {
     VkSemaphore*     submit_semaphores;
     VmaAllocator     allocator;
     u32              queue_family_index;
+    VkExtent2D       image_format;
     VkInstance       instance;
     VkPhysicalDevice physical_device;
     VkDevice         device;
