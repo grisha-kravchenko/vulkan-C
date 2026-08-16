@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <string.h>
 #define VK_USE_PLATFORM_WAYLAND_KHR
 #define GLFW_INCLUDE_VULKAN
@@ -235,7 +236,7 @@ void window_code(Program* program) {
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     };
 
-    VmaAllocationCreateInfo allocation_info = {
+    VmaAllocationCreateInfo uniform_allocation_create_info = {
         .usage = VMA_MEMORY_USAGE_AUTO,
         .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
             | VMA_ALLOCATION_CREATE_MAPPED_BIT,
@@ -245,7 +246,7 @@ void window_code(Program* program) {
     VmaAllocation uniform_allocation;
     VmaAllocationInfo uniform_allocation_info;
 
-    chk(vmaCreateBuffer(program->allocator, &buffer_info, &allocation_info, &uniform_buffer, &uniform_allocation, &uniform_allocation_info));
+    chk(vmaCreateBuffer(program->allocator, &buffer_info, &uniform_allocation_create_info, &uniform_buffer, &uniform_allocation, &uniform_allocation_info));
 
     while (!glfwWindowShouldClose(program->window)) {
         double time = glfwGetTime();

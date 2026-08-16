@@ -26,8 +26,8 @@ void on_close(Program *program) {
     vkDestroyFence(program->device, program->frame_fence, NULL);
     vkDestroyCommandPool(program->device, program->cmd_pool, NULL);
 
-    vkDestroyDevice(program->device, NULL);
     vmaDestroyAllocator(program->allocator);
+    vkDestroyDevice(program->device, NULL);
 
     glfwDestroyWindow(program->window);
     glfwTerminate();
