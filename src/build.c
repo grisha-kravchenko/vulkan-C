@@ -12,6 +12,7 @@ typedef enum {
     FLAG_RUN = 1,
     FLAG_DEBUG = 2,
     FLAG_DEBUGGER = 4,
+    FLAG_RELEASE = 8,
 } FLAGS;
 
 void print_help() {
@@ -19,6 +20,7 @@ void print_help() {
         "This is a basic build script for the program.\nNote that it hot reloads on change.\nAviable flags:\n"
         "    -r/--run   - run the program right after the compilation\n"
         "    -d/--debug - compile in debug mode\n"
+        "    --release  - enables all optimizations\n"
         "    -g         - attach debugger\n"
         "    -l         - print the dependencies list\n"
         "    -h/--help  - print this help message\n"
@@ -35,12 +37,13 @@ FLAGS get_flags(int argc, char** argv) {
             exit(0);
         }
 
-        else if (strcmp(argv[0], "-r")     == 0) ret |= FLAG_RUN;
-        else if (strcmp(argv[0], "-run")   == 0) ret |= FLAG_RUN;
-        else if (strcmp(argv[0], "-d")     == 0) ret |= FLAG_DEBUG;
-        else if (strcmp(argv[0], "-debug") == 0) ret |= FLAG_DEBUG;
-        else if (strcmp(argv[0], "-g")     == 0) ret |= FLAG_DEBUGGER;
-        else if (strcmp(argv[0], "-l")     == 0) {
+        else if (strcmp(argv[0], "-r")        == 0) ret |= FLAG_RUN;
+        else if (strcmp(argv[0], "--run")     == 0) ret |= FLAG_RUN;
+        else if (strcmp(argv[0], "-d")        == 0) ret |= FLAG_DEBUG;
+        else if (strcmp(argv[0], "--debug")   == 0) ret |= FLAG_DEBUG;
+        else if (strcmp(argv[0], "-g")        == 0) ret |= FLAG_DEBUGGER;
+        else if (strcmp(argv[0], "--release") == 0) ret |= FLAG_RELEASE;
+        else if (strcmp(argv[0], "-l")        == 0) {
             printf(
                 "[INFO]: Dependencies:\n"
                 " - [Vulkan headers]             (https://github.com/KhronosGroup/vulkan-headers)\n"
@@ -83,6 +86,7 @@ int main(int argc, char **argv) {
 
     if (flags & FLAG_DEBUG)    cmd = cmd_append(cmd, "-DDEBUG");
     if (flags & FLAG_DEBUGGER) cmd = cmd_append(cmd, "-g");
+    if (flags & FLAG_RELEASE)  cmd = cmd_append(cmd, "-flto", "-fdata-sections", "-ffunction-sections", "-Wl,--gc-sections", "-s");
     cmd_run(cmd);
     if (flags & FLAG_RUN) {
         cmd = cmd_append(cmd, TARGET);
