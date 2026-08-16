@@ -1,3 +1,4 @@
+#include <string.h>
 #define VK_USE_PLATFORM_WAYLAND_KHR
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -79,13 +80,13 @@ void create_descriptor_set(
     VkDescriptorSetLayoutBinding* bindings = NULL;
     VkDescriptorBindingFlags* flags = NULL;
     VkDescriptorPoolSize* pool_sizes = NULL;
-    u32* descriptor_counts = NULL;
+    // u32* descriptor_counts = NULL;
 
     // Preallocate the vector
     vec_sized(bindings, vec_len(layout));
     vec_sized(flags, vec_len(layout));
     vec_sized(pool_sizes, vec_len(layout));
-    vec_sized(descriptor_counts, vec_len(layout));
+    // vec_sized(descriptor_counts, vec_len(layout));
 
     for (size_t binding_i = 0; binding_i < vec_len(layout); ++binding_i) {
         vec_push(flags, layout[binding_i].flags);
@@ -104,7 +105,7 @@ void create_descriptor_set(
         };
         vec_push(pool_sizes, pool_size);
 
-        vec_push(descriptor_counts, layout[binding_i].descriptor_count);
+        // vec_push(descriptor_counts, layout[binding_i].descriptor_count);
     }
 
     VkDescriptorSetLayoutBindingFlagsCreateInfo descriptor_binding_flags = {
@@ -131,15 +132,15 @@ void create_descriptor_set(
 
     chk(vkCreateDescriptorPool(device, &descriptor_pool_create_info, NULL, descriptor_pool));
 
-    VkDescriptorSetVariableDescriptorCountAllocateInfo count_allocate_info = {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO,
-        .descriptorSetCount = vec_len(descriptor_counts),
-        .pDescriptorCounts = descriptor_counts,
-    };
+    // VkDescriptorSetVariableDescriptorCountAllocateInfo count_allocate_info = {
+    //     .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO,
+    //     .descriptorSetCount = vec_len(descriptor_counts),
+    //     .pDescriptorCounts = descriptor_counts,
+    // };
 
     VkDescriptorSetAllocateInfo descriptor_allocate_info = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .pNext = &count_allocate_info,
+        // .pNext = &count_allocate_info,
         .descriptorPool = *descriptor_pool,
         .descriptorSetCount = 1, // Same with maxSets, I don't understand
         .pSetLayouts = out_layout,
@@ -150,7 +151,7 @@ void create_descriptor_set(
     vec_free(flags);
     vec_free(bindings);
     vec_free(pool_sizes);
-    vec_free(descriptor_counts);
+    // vec_free(descriptor_counts);
 }
 
 // TODO: replace this function with a dynamic content-aware loop header
@@ -180,14 +181,23 @@ void window_code(Program* program) {
     VkDescriptorSet descriptor_set;
     VkDescriptorPool descriptor_pool;
     VkDescriptorSetLayout descriptor_set_layout;
+    DescriptorBindingLayout binding_layout0 = {
+        .binding = 0,
+        .descriptor_count = 1,
+        .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    };
     DescriptorBindingLayout binding_layout1 = {
         .binding = 1,
         .descriptor_count = 1,
-        .flags = VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT,
         .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
     };
 
-    create_descriptor_set(program->device, new_vec(DescriptorBindingLayout, binding_layout1), &descriptor_set, &descriptor_pool, &descriptor_set_layout);
+    create_descriptor_set(program->device,
+        new_vec(DescriptorBindingLayout, binding_layout0, binding_layout1),
+        &descriptor_set,
+        &descriptor_pool,
+        &descriptor_set_layout
+    );
 
     VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -213,10 +223,29 @@ void window_code(Program* program) {
 
     VkWriteDescriptorSet* descriptor_set_writes = NULL;
     vec_sized(descriptor_set_writes, 2); // preallocate the vector, usefull when more than 1 descriptor set
-    vec_len(descriptor_set_writes) = 1;
+    vec_len(descriptor_set_writes) = 2;
     // TODO: make a small function in misc.h to zero the memory
     memset(descriptor_set_writes, 0, vec_len(descriptor_set_writes) * sizeof(VkWriteDescriptorSet));
     VkImageView image_view = NULL;
+
+    VkBufferCreateInfo buffer_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = sizeof(UniformBuffer),
+        .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+
+    VmaAllocationCreateInfo allocation_info = {
+        .usage = VMA_MEMORY_USAGE_AUTO,
+        .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+            | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+    };
+
+    VkBuffer uniform_buffer;
+    VmaAllocation uniform_allocation;
+    VmaAllocationInfo uniform_allocation_info;
+
+    chk(vmaCreateBuffer(program->allocator, &buffer_info, &allocation_info, &uniform_buffer, &uniform_allocation, &uniform_allocation_info));
 
     while (!glfwWindowShouldClose(program->window)) {
         double time = glfwGetTime();
@@ -285,25 +314,47 @@ void window_code(Program* program) {
 
         chk(vkCreateImageView(program->device, &image_view_create_info, NULL, &image_view));
 
+        UniformBuffer uniforms = {
+            .resolution = {program->image_format.width, program->image_format.height},
+            .time = glfwGetTime(),
+        };
+
+        memcpy(uniform_allocation_info.pMappedData, &uniforms, sizeof(UniformBuffer));
+        vmaFlushAllocation(program->allocator, uniform_allocation, 0, VK_WHOLE_SIZE);
+
+        VkDescriptorBufferInfo uniform_buffer_binding = {
+            .buffer = uniform_buffer,
+            .range = sizeof(UniformBuffer),
+            .offset = 0,
+        };
+
+        descriptor_set_writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptor_set_writes[0].dstSet = descriptor_set;
+        descriptor_set_writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptor_set_writes[0].dstBinding = 0;
+        descriptor_set_writes[0].dstArrayElement = 0;
+        descriptor_set_writes[0].descriptorCount = 1;
+        descriptor_set_writes[0].pBufferInfo = &uniform_buffer_binding;
+
         VkDescriptorImageInfo out_img = {
             .imageView = image_view,
             .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
         };
 
-        descriptor_set_writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptor_set_writes[0].dstSet = descriptor_set;
-        descriptor_set_writes[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        descriptor_set_writes[0].dstBinding = 1;
-        descriptor_set_writes[0].dstArrayElement = 0;
-        descriptor_set_writes[0].descriptorCount = 1;
-        descriptor_set_writes[0].pImageInfo = &out_img;
+        descriptor_set_writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptor_set_writes[1].dstSet = descriptor_set;
+        descriptor_set_writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        descriptor_set_writes[1].dstBinding = 1;
+        descriptor_set_writes[1].dstArrayElement = 0;
+        descriptor_set_writes[1].descriptorCount = 1;
+        descriptor_set_writes[1].pImageInfo = &out_img;
 
         vkUpdateDescriptorSets(program->device, vec_len(descriptor_set_writes), descriptor_set_writes, 0, NULL);
 
         vkCmdBindPipeline(program->cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, compute_pipeline);
         vkCmdBindDescriptorSets(program->cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout, 0, 1, &descriptor_set, 0, NULL);
 
-        vkCmdDispatch(program->cmd_buffer, (u32)floorf((float_t)(program->image_format.width) / 16.0), (u32)floorf((float_t)(program->image_format.height) / 16.0), 1);
+        vkCmdDispatch(program->cmd_buffer, (u32)ceilf((float_t)(program->image_format.width) / 16.0), (u32)ceilf((float_t)(program->image_format.height) / 16.0), 1);
 
         transition_image(program, program->images[image_index], VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
         vkEndCommandBuffer(program->cmd_buffer);
@@ -345,6 +396,8 @@ void window_code(Program* program) {
 
     vec_free(descriptor_set_writes);
     vkDeviceWaitIdle(program->device);
+
+    vmaDestroyBuffer(program->allocator, uniform_buffer, uniform_allocation);
 
     vkDestroyImageView(program->device, image_view, NULL);
     vkDestroyShaderModule(program->device, shader, NULL);

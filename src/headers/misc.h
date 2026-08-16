@@ -17,7 +17,7 @@ typedef struct {
 #define try_c(value, message, callback) if (!(value))               \
     {printf("[FATAL ERROR]: %s (%s:%i)\n", message, __FILE__, __LINE__); callback(); abort();}
 
-#define vec_len(vector) ((ArrayHeader *)(vector) - 1)->count
+#define vec_len(vector) (((ArrayHeader *)(vector) - 1)->count)
 
 #define vec_sized(array, size) do {                                                       \
     ArrayHeader* __header = malloc((size) * sizeof((array)[0]) + sizeof(ArrayHeader));    \

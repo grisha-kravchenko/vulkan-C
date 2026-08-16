@@ -38,10 +38,17 @@ typedef struct {
 } Program;
 
 typedef struct {
-    u32 binding;
-    u32 descriptor_count; // idrk
+    u32                      binding;
+    u32                      descriptor_count; // idrk
     VkDescriptorBindingFlags flags;
-    VkDescriptorType type;
+    VkDescriptorType         type;
 } DescriptorBindingLayout; // Custom specification of descriptor layout that does not need to be allocated
+
+typedef struct {
+    u32 resolution[2];
+    float time;
+
+    u8 padding[4]; // std140 requires struct size to be a multiple of 16
+} UniformBuffer;
 
 #endif
