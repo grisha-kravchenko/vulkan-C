@@ -1,4 +1,3 @@
-#include <stdio.h>
 #define VK_USE_PLATFORM_WAYLAND_KHR
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -212,9 +211,12 @@ void window_code(Program* program) {
     VkPipeline compute_pipeline;
     chk(vkCreateComputePipelines(program->device, VK_NULL_HANDLE, 1, &pipeline_create_info, NULL, &compute_pipeline));
 
-    // VkWriteDescriptorSet* descriptor_set_writes = NULL;
-    // vec_sized(descriptor_set_writes, 1); // preallocate the vector, usefull when more than 1 descriptor set
-    VkWriteDescriptorSet descriptor_set_writes[1];
+    VkWriteDescriptorSet* descriptor_set_writes = NULL;
+    vec_sized(descriptor_set_writes, 2); // preallocate the vector, usefull when more than 1 descriptor set
+    vec_len(descriptor_set_writes) = 1;
+    // TODO: make a small function in misc.h to zero the memory
+    memset(descriptor_set_writes, 0, vec_len(descriptor_set_writes) * sizeof(VkWriteDescriptorSet));
+    VkImageView image_view = NULL;
 
     while (!glfwWindowShouldClose(program->window)) {
         double time = glfwGetTime();
@@ -262,6 +264,9 @@ void window_code(Program* program) {
         //     &color, 1, &range
         // );
 
+        if (image_view != NULL)
+            vkDestroyImageView(program->device, image_view, NULL);
+
         VkImageViewCreateInfo image_view_create_info = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
             .image = program->images[image_index],
@@ -278,7 +283,6 @@ void window_code(Program* program) {
             .subresourceRange.levelCount = 1,
         };
 
-        VkImageView image_view;
         chk(vkCreateImageView(program->device, &image_view_create_info, NULL, &image_view));
 
         VkDescriptorImageInfo out_img = {
@@ -294,17 +298,15 @@ void window_code(Program* program) {
         descriptor_set_writes[0].descriptorCount = 1;
         descriptor_set_writes[0].pImageInfo = &out_img;
 
-        vkUpdateDescriptorSets(program->device, 1, descriptor_set_writes, 0, NULL);
+        vkUpdateDescriptorSets(program->device, vec_len(descriptor_set_writes), descriptor_set_writes, 0, NULL);
 
         vkCmdBindPipeline(program->cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, compute_pipeline);
         vkCmdBindDescriptorSets(program->cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout, 0, 1, &descriptor_set, 0, NULL);
 
-        vkCmdDispatch(program->cmd_buffer, 16, 16, 1);
+        vkCmdDispatch(program->cmd_buffer, (u32)floorf((float_t)(program->image_format.width) / 16.0), (u32)floorf((float_t)(program->image_format.height) / 16.0), 1);
 
         transition_image(program, program->images[image_index], VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
         vkEndCommandBuffer(program->cmd_buffer);
-
-        vkDestroyImageView(program->device, image_view, NULL);
 
         VkPipelineStageFlags wait_stages[] = {
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
@@ -341,9 +343,10 @@ void window_code(Program* program) {
         glfwPollEvents();
     }
 
-    // vec_free(descriptor_set_writes);
+    vec_free(descriptor_set_writes);
     vkDeviceWaitIdle(program->device);
 
+    vkDestroyImageView(program->device, image_view, NULL);
     vkDestroyShaderModule(program->device, shader, NULL);
     vkDestroyDescriptorPool(program->device, descriptor_pool, NULL);
     vkDestroyDescriptorSetLayout(program->device, descriptor_set_layout, NULL);
