@@ -200,7 +200,7 @@ int cmd_run_conditional(char* cmd, char** sources, char** outputs) {
     };
     if (should_run == 0) {
         vec_len(cmd) = 0;
-        return 0;
+        return -1;
     }
     return cmd_run(cmd);
 }

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <dirent.h>
 
 #define BUILD_SCRIPT_IMPLEMENTATION
 #include "headers/misc.h"
@@ -64,6 +65,48 @@ FLAGS get_flags(int argc, char** argv) {
     return ret;
 }
 
+// ignoring the existence of make
+char* build_lua(char* cmd, FLAGS flags) {
+    struct stat st;
+    if (stat("tmp/lua", &st) == -1) mkdir("tmp/lua", 0700);
+
+    DIR* lua = opendir("vendor/lua");
+    try(lua, "couldn't open ./vendor/lua folder");
+    struct dirent* lua_file;
+
+    char** object_files = NULL;
+
+    while ((lua_file = readdir(lua)) != NULL) {
+        char* file_name = lua_file->d_name;
+        size_t name_len = strlen(file_name);
+
+        if (file_name[name_len - 2] != '.' || file_name[name_len - 1] != 'c')
+            continue;
+        if (strcmp(file_name, "lua.c") == 0 || strcmp(file_name, "luac.c") == 0)
+            continue;
+
+        char* output_file = vec_to_str(new_vec(char*, "tmp/lua/", file_name, ".o"));
+        char* source_file = vec_to_str(new_vec(char*, "vendor/lua/", file_name));
+
+        cmd = cmd_append(cmd, "gcc", "-c", "-o", output_file, source_file, "-O3", "-Wall", "-Wextra");
+        cmd_run_conditional(cmd, new_vec(char*, source_file), new_vec(char*, output_file));
+
+        free(source_file);
+        vec_push(object_files, output_file);
+    }
+
+    closedir(lua);
+
+    cmd = cmd_append(cmd, "ar", "rcus", "tmp/liblua.a");
+    for (size_t i = 0; i < vec_len(object_files); ++i) cmd = cmd_append(cmd, object_files[i]);
+    cmd_run_conditional(cmd, new_vec(char*, "vendor/lua/lua.c"), new_vec(char*, "tmp/liblua.a"));
+
+    for (size_t i = 0; i < vec_len(object_files); ++i) free(object_files[i]);
+    vec_free(object_files);
+
+    return cmd;
+}
+
 int main(int argc, char **argv) {
     rebuild_builder(argc, argv, "src/headers/misc.h");
     FLAGS flags = get_flags(argc, argv);
@@ -77,6 +120,8 @@ int main(int argc, char **argv) {
     cmd = cmd_append(cmd, "gcc", "-r", "tmp/vma_impl.o", "-lstdc++", "-o", "tmp/vma.o");
     cmd_run_conditional(cmd, new_vec(char*, "src/vma_impl.cpp", "src/headers/thirdparty/vk_mem_alloc.h"), new_vec(char*, "tmp/vma.o"));
 
+    cmd = build_lua(cmd, flags);
+
     cmd = cmd_append(cmd, "slangc", "-o", "tmp/test.spv", "--", "src/shaders/test.slang", "&&");
     cmd = cmd_append(cmd, "xxd", "-i", "tmp/test.spv", ">", "tmp/test.pv.h");
     if (cmd_run(cmd)) return 1;
@@ -84,6 +129,7 @@ int main(int argc, char **argv) {
     cmd = cmd_append(cmd, "gcc", "-o", TARGET);
     cmd = cmd_append(cmd, "src/init.c", "src/main.c", "src/vulkan_misc.c", "src/window.c", "tmp/vma.o");
     cmd = cmd_append(cmd, "-O3", "-lvulkan", "-lglfw", "-lm");
+    cmd = cmd_append(cmd, "-I./vendor/lua", "tmp/liblua.a");
 
     if (flags & FLAG_DEBUG)    cmd = cmd_append(cmd, "-DDEBUG");
     if (flags & FLAG_DEBUGGER) cmd = cmd_append(cmd, "-g");
