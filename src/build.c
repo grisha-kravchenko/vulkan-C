@@ -50,6 +50,7 @@ FLAGS get_flags(int argc, char** argv) {
                 " - [glfw3]                      (https://github.com/glfw/glfw) (Compatible with wayland)\n"
                 "[INFO]: Used libraries:\n"
                 " - [Vulkan Memory Allocator]    (https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator)\n"
+                " - [Lua Language]               (https://github.com/lua/lua)\n"
             );
             exit(0);
         }
