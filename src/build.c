@@ -52,6 +52,7 @@ FLAGS get_flags(int argc, char** argv) {
                 "[INFO]: Used libraries:\n"
                 " - [Vulkan Memory Allocator]    (https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator)\n"
                 " - [Lua Language]               (https://github.com/lua/lua)\n"
+                " - [Slang Language]             (https://github.com/shader_slang/slang) (it is being distributed as libslang.so in tmp/ folder and is require at runtime)\n"
             );
             exit(0);
         }
@@ -82,7 +83,7 @@ char* build_lua(char* cmd, FLAGS flags) {
 
         if (file_name[name_len - 2] != '.' || file_name[name_len - 1] != 'c')
             continue;
-        if (strcmp(file_name, "lua.c") == 0 || strcmp(file_name, "luac.c") == 0)
+        if (strcmp(file_name, "lua.c") == 0 || strcmp(file_name, "luac.c") == 0 || strcmp(file_name, "onelua.c") == 0)
             continue;
 
         char* output_file = vec_to_str(new_vec(char*, "tmp/lua/", file_name, ".o"));
@@ -107,6 +108,18 @@ char* build_lua(char* cmd, FLAGS flags) {
     return cmd;
 }
 
+// TODO: replace with an actual building of the .a
+char* download_libslang(char* cmd) {
+    // download the slang library from the official repository
+    cmd = cmd_append(cmd, "wget", "-O", "tmp/slang.zip", "https://github.com/shader-slang/slang/releases/download/v2026.14.1/slang-2026.14.1-linux-x86_64.zip");
+    cmd_run_conditional(cmd, new_vec(char*, "tmp/slang.so"), new_vec(char*, "tmp/slang.so"));
+    cmd = cmd_append(cmd, "unzip", "tmp/slang.zip", "-d", "tmp/slang", "&&");
+    cmd = cmd_append(cmd, "cp", "tmp/slang/lib/libslang.so", "tmp/slang.so", "&&");
+    cmd = cmd_append(cmd, "cp", "tmp/slang/include/slang.h", "tmp/slang.h");
+    cmd_run_conditional(cmd, new_vec(char*, "tmp/slang.so"), new_vec(char*, "tmp/slang.so"));
+    return cmd;
+}
+
 int main(int argc, char **argv) {
     rebuild_builder(argc, argv, "src/headers/misc.h");
     FLAGS flags = get_flags(argc, argv);
@@ -121,21 +134,26 @@ int main(int argc, char **argv) {
     cmd_run_conditional(cmd, new_vec(char*, "src/vma_impl.cpp", "src/headers/thirdparty/vk_mem_alloc.h"), new_vec(char*, "tmp/vma.o"));
 
     cmd = build_lua(cmd, flags);
+    cmd = download_libslang(cmd); // hopefully will be replaced soon, but I can't be bothered right now
 
-    cmd = cmd_append(cmd, "slangc", "-o", "tmp/test.spv", "--", "src/shaders/test.slang", "&&");
+    cmd = cmd_append(cmd, "./tmp/slang/bin/slangc", "-o", "tmp/test.spv", "--", "src/shaders/test.slang", "&&");
     cmd = cmd_append(cmd, "xxd", "-i", "tmp/test.spv", ">", "tmp/test.pv.h");
     if (cmd_run(cmd)) return 1;
 
+    cmd = cmd_append(cmd, "LD_LIBRARY_PATH=./tmp:$LD_LIBRARY_PATH", "&&");
     cmd = cmd_append(cmd, "gcc", "-o", TARGET);
-    cmd = cmd_append(cmd, "src/init.c", "src/main.c", "src/vulkan_misc.c", "src/window.c", "tmp/vma.o");
+    cmd = cmd_append(cmd, "src/init.c", "src/main.c", "src/vulkan_misc.c", "src/window.c", "src/lua_api.c", "tmp/vma.o");
     cmd = cmd_append(cmd, "-O3", "-lvulkan", "-lglfw", "-lm");
-    cmd = cmd_append(cmd, "-I./vendor/lua", "tmp/liblua.a");
+    cmd = cmd_append(cmd, "-Wl,-Bstatic", "-L./tmp", "-llua", "-Wl,-Bdynamic", "-lslang");
 
     if (flags & FLAG_DEBUG)    cmd = cmd_append(cmd, "-DDEBUG");
     if (flags & FLAG_DEBUGGER) cmd = cmd_append(cmd, "-g");
     if (flags & FLAG_RELEASE)  cmd = cmd_append(cmd, "-flto", "-fdata-sections", "-ffunction-sections", "-Wl,--gc-sections", "-s");
-    cmd_run(cmd);
-    if (flags & FLAG_RUN) {
+    int res = cmd_run(cmd);
+    printf("\n[INFO]: the program has %s\n\n", res == 0 ? "compiled successfully.\n"
+             "[INFO]: note that the program is dependent on slang.so (/usr/lib/slang.so)." : "failed to compile.");
+
+    if (res == 0 && (flags & FLAG_RUN)) {
         cmd = cmd_append(cmd, TARGET);
         cmd_run(cmd);
     }
@@ -143,3 +161,4 @@ int main(int argc, char **argv) {
     vec_free(cmd);
     return 0;
 }
+

@@ -23,3 +23,5 @@ binary.
 The project uses [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator),
 and destributes its copy within a git repository.
 
+The project uses [Lua Language](https://github.com/lua/lua)
+

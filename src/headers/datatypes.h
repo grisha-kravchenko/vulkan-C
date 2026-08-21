@@ -44,6 +44,40 @@ typedef struct {
     VkDescriptorType         type;
 } DescriptorBindingLayout; // Custom specification of descriptor layout that does not need to be allocated
 
+typedef enum {
+    UNIFORM_TYPE_IMAGE,
+    UNIFORM_TYPE_FLOAT,
+    UNIFORM_TYPE_INT,
+    UNIFORM_TYPE_VEC2,
+    UNIFORM_TYPE_VEC3,
+} UniformType; // all the supported uniform types
+
+typedef struct {
+    UniformType uniform_type;
+    union {
+        VkImage image;
+        float number;
+        i32 integer;
+        float vector2[2];
+        float vector3[3];
+    } uniform;
+    i32 binding;
+} Uniforms;
+
+typedef struct {
+    VkShaderModule shader; // shader to execute
+    float size[2]; // dimensions of the image (let's keep it 2D for simplicity for now)
+    Uniforms* uniforms; // all the additional (excluding default ones) uniforms to apply
+} ShaderOperarion;
+
+typedef struct {
+    char** loaded_modules; // vec of modules names, used to hot reload lua later
+    char** loaded_shaders; // vec of shaders names, used to hot reload shader files later
+    VkShaderModule* shaders; // vec of shaders used by program
+    VkImage* images; // vec of images to be able to free them afterwards
+    Program* program; // handle to the fully initialized program to be able to access gpu
+} PipelineData;
+
 typedef struct {
     u32 resolution[2];
     float time;
