@@ -1,6 +1,8 @@
 #include "../vendor/lua/lua.h"
 #include "../vendor/lua/lualib.h"
 #include "../vendor/lua/lauxlib.h"
+#include "../tmp/slang.h"
+
 #include "headers/datatypes.h"
 #include <stdio.h>
 
@@ -43,6 +45,10 @@ int c_load_shader(lua_State* lua_state) {
 
     fclose(file);
     return 0;
+}
+
+void initialise_slang(void) {
+    slang_IGlobalSession global_session = NULL;
 }
 
 void execute_lua_file(char* script_path, Program* program) {
